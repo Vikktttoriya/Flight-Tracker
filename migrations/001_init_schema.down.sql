@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS statistics;
+DROP TABLE IF EXISTS flights;
+DROP TABLE IF EXISTS users;

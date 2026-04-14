@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: flight_tracker_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-postgres}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    image: migrate/migrate:v4.15.1
+    container_name: flight_tracker_migrator
+    command:
+      - "-path"
+      - "/migrations"
+      - "-database"
+      - "postgres://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:${DB_PORT:-5432}/${DB_NAME:-flight-tracker}?sslmode=${DB_SSLMODE:-disable}"
+      - "up"
+    volumes:
+      - ./migrations:/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  app:
+    build: .
+    container_name: flight_tracker_app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
+    environment:
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-flight_tracker}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      APP_PORT: ${APP_PORT:-8080}
+      JWT_SECRET: ${JWT_SECRET:-u8x/A?D(G+KbPeShVmYq3t6w9z+C-E)H@McQfTjWnZr4u7x!A%D*G-JaNdRgUkXp}
+      JWT_TTL_HOURS: ${JWT_TTL_HOURS:-24}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FILE_PATH: ${LOG_FILE_PATH:-./logs/flight_tracker.log}
+      LOG_MAX_AGE_HOURS: ${LOG_MAX_AGE_HOURS:-720}
+      WORKER_STATS_COLLECTION_INTERVAL_MINUTES: ${WORKER_STATS_COLLECTION_INTERVAL_MINUTES:-2}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1" ]
+      interval: 30s
+
+volumes:
+  postgres_data:
